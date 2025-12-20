@@ -1,0 +1,119 @@
+# Cloud Run Service Configuration
+# Voice-Based Rubber Duck Debugger
+#
+# Deploy with:
+#   gcloud run services replace cloud-run.yaml --region=us-central1
+#
+# Or use the gcloud run deploy command (see README for details)
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: voice-rubber-duck-debugger
+  labels:
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    run.googleapis.com/description: "Voice-first AI-powered debugging assistant"
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Auto-scaling configuration
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        
+        # Request timeout (60 seconds for voice processing)
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "false"
+        
+        # Startup CPU boost for faster cold starts
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      # Maximum concurrent requests per container
+      containerConcurrency: 80
+      
+      # Request timeout
+      timeoutSeconds: 60
+      
+      # Service account (optional - uncomment and set your service account)
+      # serviceAccountName: voice-debugger-sa@PROJECT_ID.iam.gserviceaccount.com
+      
+      containers:
+        - image: gcr.io/PROJECT_ID/voice-rubber-duck-debugger:latest
+          
+          # Resource allocation
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+            requests:
+              memory: "512Mi"
+              cpu: "0.5"
+          
+          # Port configuration
+          ports:
+            - containerPort: 8080
+              name: http1
+          
+          # Environment variables
+          # Note: Sensitive values should be stored in Secret Manager
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8080"
+            - name: FRONTEND_URL
+              value: "https://voice-rubber-duck-debugger-HASH-uc.a.run.app"
+            - name: SESSION_TIMEOUT
+              value: "3600000"
+            
+            # ElevenLabs API Key (from Secret Manager)
+            - name: ELEVENLABS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: elevenlabs-api-key
+                  key: latest
+            
+            # Google Cloud Project ID
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['run.googleapis.com/project-id']
+            
+            # Vertex AI Location
+            - name: VERTEX_AI_LOCATION
+              value: "us-central1"
+            
+            # Optional: Redis URL (from Secret Manager)
+            # Uncomment if using Redis for session storage
+            # - name: REDIS_URL
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: redis-url
+            #       key: latest
+          
+          # Startup probe - checks if the app has started
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          
+          # Liveness probe - checks if the app is still running
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+  
+  # Traffic configuration
+  traffic:
+    - percent: 100
+      latestRevision: true
