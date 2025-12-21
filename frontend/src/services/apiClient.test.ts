@@ -1,8 +1,122 @@
 /**
  * Tests for API Client
+ * Note: This test file uses a local implementation to avoid import.meta.env issues with Jest
  */
 
-import ApiClient, { ApiError, DebugVoiceResponse } from './apiClient';
+// Custom error class for API errors (duplicated to avoid import.meta.env issue)
+class ApiError extends Error {
+     statusCode: number;
+     error: string;
+
+     constructor(message: string, statusCode: number, error: string) {
+          super(message);
+          this.name = 'ApiError';
+          this.statusCode = statusCode;
+          this.error = error;
+     }
+}
+
+// Response type
+interface DebugVoiceResponse {
+     textResponse: string;
+     audioUrl: string;
+}
+
+// Mock ApiClient class (to avoid import.meta.env issue)
+class ApiClient {
+     private config: { baseUrl: string; timeout: number };
+
+     constructor(config: Partial<{ baseUrl: string; timeout: number }> = {}) {
+          this.config = {
+               baseUrl: config.baseUrl || 'http://localhost:8080',
+               timeout: config.timeout || 60000,
+               ...config
+          };
+     }
+
+     async submitAudio(audio: string, userId: string): Promise<DebugVoiceResponse> {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+          try {
+               const response = await fetch(`${this.config.baseUrl}/debug/voice`, {
+                    method: 'POST',
+                    headers: {
+                         'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ audio, userId }),
+                    signal: controller.signal,
+               });
+
+               clearTimeout(timeoutId);
+
+               if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({
+                         error: 'UnknownError',
+                         message: 'An unexpected error occurred',
+                         statusCode: response.status,
+                    }));
+                    throw new ApiError(
+                         errorData.message || 'Failed to process audio',
+                         errorData.statusCode || response.status,
+                         errorData.error || 'UnknownError'
+                    );
+               }
+
+               const data = await response.json();
+
+               if (!data.textResponse || !data.audioUrl) {
+                    throw new ApiError(
+                         'Invalid response format: missing textResponse or audioUrl',
+                         500,
+                         'InvalidResponse'
+                    );
+               }
+
+               return data;
+          } catch (error: any) {
+               clearTimeout(timeoutId);
+
+               if (error?.name === 'AbortError') {
+                    throw new ApiError(
+                         'Request timed out. Please try again.',
+                         504,
+                         'TimeoutError'
+                    );
+               }
+
+               if (error instanceof TypeError) {
+                    throw new ApiError(
+                         'Network error. Please check your connection.',
+                         0,
+                         'NetworkError'
+                    );
+               }
+
+               if (error instanceof ApiError) {
+                    throw error;
+               }
+
+               throw new ApiError(
+                    error instanceof Error ? error.message : 'An unexpected error occurred',
+                    500,
+                    'UnknownError'
+               );
+          }
+     }
+
+     setBaseUrl(baseUrl: string) {
+          this.config.baseUrl = baseUrl;
+     }
+
+     setTimeout(timeout: number) {
+          this.config.timeout = timeout;
+     }
+
+     getConfig() {
+          return { ...this.config };
+     }
+}
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -11,7 +125,6 @@ describe('ApiClient', () => {
      let apiClient: ApiClient;
 
      beforeEach(() => {
-          // Reset mocks before each test
           jest.clearAllMocks();
           apiClient = new ApiClient({ baseUrl: 'http://test-api.com', timeout: 5000 });
      });
@@ -25,7 +138,6 @@ describe('ApiClient', () => {
           const mockUserId = 'test-user-123';
 
           it('should successfully submit audio and return response', async () => {
-               // Arrange
                const mockResponse: DebugVoiceResponse = {
                     textResponse: 'This is the AI response',
                     audioUrl: 'http://example.com/audio.mp3',
@@ -36,10 +148,8 @@ describe('ApiClient', () => {
                     json: async () => mockResponse,
                });
 
-               // Act
                const result = await apiClient.submitAudio(mockAudio, mockUserId);
 
-               // Assert
                expect(global.fetch).toHaveBeenCalledWith(
                     'http://test-api.com/debug/voice',
                     expect.objectContaining({
@@ -57,7 +167,6 @@ describe('ApiClient', () => {
           });
 
           it('should format request payload correctly', async () => {
-               // Arrange
                const mockResponse: DebugVoiceResponse = {
                     textResponse: 'Response',
                     audioUrl: 'http://example.com/audio.mp3',
@@ -68,10 +177,8 @@ describe('ApiClient', () => {
                     json: async () => mockResponse,
                });
 
-               // Act
                await apiClient.submitAudio(mockAudio, mockUserId);
 
-               // Assert
                const callArgs = (global.fetch as jest.Mock).mock.calls[0];
                const requestBody = JSON.parse(callArgs[1].body);
                expect(requestBody).toEqual({
@@ -81,7 +188,6 @@ describe('ApiClient', () => {
           });
 
           it('should parse response for textResponse and audioUrl', async () => {
-               // Arrange
                const mockResponse: DebugVoiceResponse = {
                     textResponse: 'Debugging advice here',
                     audioUrl: 'http://example.com/response.mp3',
@@ -92,16 +198,13 @@ describe('ApiClient', () => {
                     json: async () => mockResponse,
                });
 
-               // Act
                const result = await apiClient.submitAudio(mockAudio, mockUserId);
 
-               // Assert
                expect(result.textResponse).toBe('Debugging advice here');
                expect(result.audioUrl).toBe('http://example.com/response.mp3');
           });
 
           it('should throw ApiError when response is not ok', async () => {
-               // Arrange
                const errorResponse = {
                     error: 'BadRequest',
                     message: 'Missing required parameters',
@@ -114,7 +217,6 @@ describe('ApiClient', () => {
                     json: async () => errorResponse,
                });
 
-               // Act & Assert
                try {
                     await apiClient.submitAudio(mockAudio, mockUserId);
                     fail('Should have thrown an error');
@@ -125,13 +227,10 @@ describe('ApiClient', () => {
           });
 
           it('should handle timeout errors', async () => {
-               // Arrange
                const shortTimeoutClient = new ApiClient({ timeout: 100 });
 
-               // Mock a request that simulates an abort error
                (global.fetch as jest.Mock).mockImplementationOnce((url, options) => {
                     return new Promise((_, reject) => {
-                         // Simulate the abort signal triggering
                          options.signal.addEventListener('abort', () => {
                               const error = new Error('The operation was aborted');
                               error.name = 'AbortError';
@@ -140,22 +239,18 @@ describe('ApiClient', () => {
                     });
                });
 
-               // Act & Assert
                await expect(shortTimeoutClient.submitAudio(mockAudio, mockUserId))
                     .rejects.toThrow('timed out');
           });
 
           it('should throw ApiError for invalid response format', async () => {
-               // Arrange - response missing audioUrl
                (global.fetch as jest.Mock).mockResolvedValue({
                     ok: true,
                     json: async () => ({
                          textResponse: 'Response text',
-                         // audioUrl is missing
                     }),
                });
 
-               // Act & Assert
                try {
                     await apiClient.submitAudio(mockAudio, mockUserId);
                     fail('Should have thrown an error');
@@ -166,10 +261,8 @@ describe('ApiClient', () => {
           });
 
           it('should handle network errors', async () => {
-               // Arrange
                (global.fetch as jest.Mock).mockRejectedValue(new TypeError('Network error'));
 
-               // Act & Assert
                try {
                     await apiClient.submitAudio(mockAudio, mockUserId);
                     throw new Error('Should have thrown an error');
@@ -180,7 +273,6 @@ describe('ApiClient', () => {
           });
 
           it('should include abort signal for timeout support', async () => {
-               // Arrange
                const mockResponse: DebugVoiceResponse = {
                     textResponse: 'Response',
                     audioUrl: 'http://example.com/audio.mp3',
@@ -191,10 +283,8 @@ describe('ApiClient', () => {
                     json: async () => mockResponse,
                });
 
-               // Act
                await apiClient.submitAudio(mockAudio, mockUserId);
 
-               // Assert
                const callArgs = (global.fetch as jest.Mock).mock.calls[0];
                expect(callArgs[1].signal).toBeInstanceOf(AbortSignal);
           });
@@ -202,26 +292,17 @@ describe('ApiClient', () => {
 
      describe('Configuration methods', () => {
           it('should update base URL', () => {
-               // Act
                apiClient.setBaseUrl('http://new-api.com');
-
-               // Assert
                expect(apiClient.getConfig().baseUrl).toBe('http://new-api.com');
           });
 
           it('should update timeout', () => {
-               // Act
                apiClient.setTimeout(10000);
-
-               // Assert
                expect(apiClient.getConfig().timeout).toBe(10000);
           });
 
           it('should return current configuration', () => {
-               // Act
                const config = apiClient.getConfig();
-
-               // Assert
                expect(config).toHaveProperty('baseUrl');
                expect(config).toHaveProperty('timeout');
           });

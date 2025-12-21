@@ -379,5 +379,6 @@
     - Include license information
     - _Requirements: Documentation supports all requirements_
 
-- [ ] 21. Final checkpoint - End-to-end testing
+- [x] 21. Final checkpoint - End-to-end testing
+
   - Ensure all tests pass, ask the user if questions arise.

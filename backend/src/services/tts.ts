@@ -27,7 +27,7 @@ export class TTSService {
         this.retryDelay = config?.retryDelay || 1000; // 1 second
 
         if (!this.apiKey) {
-            console.warn('[TTS] ELEVENLABS_API_KEY not configured - TTS will be disabled');
+            throw new Error('ELEVENLABS_API_KEY is required for TTS service');
         }
     }
 
@@ -105,9 +105,8 @@ export class TTSService {
                 return audioBase64;
             } catch (retryError) {
                 console.error('[TTS] Retry attempt failed:', retryError);
-
-                // Fallback: return base64 text if TTS fails completely
-                return Buffer.from(text).toString('base64');
+                if (userId) logger.logError(userId, retryError as Error);
+                throw new Error('Failed to generate audio response. Please try again.');
             }
         }
     }

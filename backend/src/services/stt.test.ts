@@ -19,6 +19,21 @@ jest.mock('../utils/logger', () => ({
      }
 }));
 
+/**
+ * Custom generator for valid audio base64 data
+ * The STT service requires audio buffers >= 1000 bytes
+ * Base64 encoding increases size by ~33%, so we need at least 750 chars of raw data
+ * to get 1000 bytes after decoding. Using 1500 chars to be safe.
+ */
+const validAudioBase64 = fc.string({ minLength: 1500, maxLength: 3000 })
+     .map(s => Buffer.from(s).toString('base64'));
+
+const validUserId = fc.string({ minLength: 1, maxLength: 50 })
+     .filter(s => s.trim().length > 0);
+
+const validTranscribedText = fc.string({ minLength: 1, maxLength: 500 })
+     .filter(s => s.trim().length > 0);
+
 describe('STT Service', () => {
      beforeEach(() => {
           jest.clearAllMocks();
@@ -35,8 +50,8 @@ describe('STT Service', () => {
           it('should retry exactly once with delay when first attempt fails', async () => {
                await fc.assert(
                     fc.asyncProperty(
-                         fc.string({ minLength: 10 }),
-                         fc.string({ minLength: 1 }),
+                         validAudioBase64,
+                         validUserId,
                          async (audioBase64, userId) => {
                               const sttService = new STTService({
                                    apiKey: 'test-api-key',
@@ -79,8 +94,8 @@ describe('STT Service', () => {
           it('should throw error after both attempts fail', async () => {
                await fc.assert(
                     fc.asyncProperty(
-                         fc.string({ minLength: 10 }),
-                         fc.string({ minLength: 1 }),
+                         validAudioBase64,
+                         validUserId,
                          async (audioBase64, userId) => {
                               const sttService = new STTService({
                                    apiKey: 'test-api-key',
@@ -111,9 +126,9 @@ describe('STT Service', () => {
           it('should succeed on first attempt without retry', async () => {
                await fc.assert(
                     fc.asyncProperty(
-                         fc.string({ minLength: 10 }),
-                         fc.string({ minLength: 1 }),
-                         fc.string({ minLength: 1 }),
+                         validAudioBase64,
+                         validUserId,
+                         validTranscribedText,
                          async (audioBase64, userId, transcribedText) => {
                               const sttService = new STTService({
                                    apiKey: 'test-api-key',
@@ -152,8 +167,8 @@ describe('STT Service', () => {
           it('should timeout requests that exceed configured timeout', async () => {
                await fc.assert(
                     fc.asyncProperty(
-                         fc.string({ minLength: 10 }),
-                         fc.string({ minLength: 1 }),
+                         validAudioBase64,
+                         validUserId,
                          async (audioBase64, userId) => {
                               const sttService = new STTService({
                                    apiKey: 'test-api-key',
@@ -181,9 +196,9 @@ describe('STT Service', () => {
           it('should complete successfully when request finishes within timeout', async () => {
                await fc.assert(
                     fc.asyncProperty(
-                         fc.string({ minLength: 10 }),
-                         fc.string({ minLength: 1 }),
-                         fc.string({ minLength: 1 }),
+                         validAudioBase64,
+                         validUserId,
+                         validTranscribedText,
                          async (audioBase64, userId, transcribedText) => {
                               const sttService = new STTService({
                                    apiKey: 'test-api-key',

@@ -1,6 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import * as fc from 'fast-check';
 import AudioRecorder from './AudioRecorder';
 
 // Mock MediaRecorder API
@@ -9,6 +8,7 @@ class MockMediaRecorder {
      ondataavailable: ((event: { data: Blob }) => void) | null = null;
      onstop: (() => void) | null = null;
      stream: MediaStream;
+     static isTypeSupported = jest.fn(() => true);
 
      constructor(stream: MediaStream) {
           this.stream = stream;
@@ -58,7 +58,7 @@ describe('AudioRecorder Component', () => {
           // Mock FileReader for base64 conversion
           const mockFileReader = {
                readAsDataURL: jest.fn(function (this: any) {
-                    this.onloadend?.();
+                    setTimeout(() => this.onloadend?.(), 0);
                }),
                result: 'data:audio/webm;base64,bW9jayBhdWRpbyBkYXRh',
           };
@@ -67,60 +67,58 @@ describe('AudioRecorder Component', () => {
 
      afterEach(() => {
           jest.clearAllMocks();
+          cleanup();
      });
 
      /**
       * Feature: voice-rubber-duck-debugger, Property 1: Audio recording triggers backend processing
       * Validates: Requirements 1.3
+      * 
+      * For any valid audio recording, stopping the recording should trigger an API call 
+      * to the backend with the audio data and userId.
       */
      it('should trigger onRecordingComplete with base64 audio data when recording stops', async () => {
-          await fc.assert(
-               fc.asyncProperty(
-                    fc.string({ minLength: 1, maxLength: 50 }), // Generate random user IDs
-                    async (_userId) => {
-                         const onRecordingComplete = jest.fn();
-                         const onError = jest.fn();
+          const onRecordingComplete = jest.fn();
+          const onError = jest.fn();
 
-                         const { unmount } = render(
-                              <AudioRecorder
-                                   onRecordingComplete={onRecordingComplete}
-                                   onError={onError}
-                              />
-                         );
-
-                         const button = screen.getByRole('button', { name: /start recording/i });
-
-                         // Start recording
-                         await userEvent.click(button);
-
-                         // Wait for recording to start
-                         await waitFor(() => {
-                              expect(screen.getByRole('button', { name: /stop recording/i })).toBeInTheDocument();
-                         });
-
-                         // Stop recording
-                         const stopButton = screen.getByRole('button', { name: /stop recording/i });
-                         await userEvent.click(stopButton);
-
-                         // Wait for onRecordingComplete to be called
-                         await waitFor(() => {
-                              expect(onRecordingComplete).toHaveBeenCalled();
-                         }, { timeout: 1000 });
-
-                         // Verify that onRecordingComplete was called with base64 string
-                         expect(onRecordingComplete).toHaveBeenCalledWith(
-                              expect.stringMatching(/^[A-Za-z0-9+/=]+$/)
-                         );
-
-                         // Verify no errors occurred
-                         expect(onError).not.toHaveBeenCalled();
-
-                         unmount();
-                    }
-               ),
-               { numRuns: 100 }
+          render(
+               <AudioRecorder
+                    onRecordingComplete={onRecordingComplete}
+                    onError={onError}
+               />
           );
-     }, 30000); // 30 second timeout for property-based test with 100 runs
+
+          const button = screen.getByRole('button', { name: /start recording/i });
+
+          // Start recording
+          await act(async () => {
+               await userEvent.click(button);
+          });
+
+          // Wait for recording to start
+          await waitFor(() => {
+               expect(screen.getByRole('button', { name: /stop recording/i })).toBeInTheDocument();
+          });
+
+          // Stop recording
+          const stopButton = screen.getByRole('button', { name: /stop recording/i });
+          await act(async () => {
+               await userEvent.click(stopButton);
+          });
+
+          // Wait for onRecordingComplete to be called
+          await waitFor(() => {
+               expect(onRecordingComplete).toHaveBeenCalled();
+          }, { timeout: 2000 });
+
+          // Verify that onRecordingComplete was called with base64 string
+          expect(onRecordingComplete).toHaveBeenCalledWith(
+               expect.stringMatching(/^[A-Za-z0-9+/=]+$/)
+          );
+
+          // Verify no errors occurred
+          expect(onError).not.toHaveBeenCalled();
+     });
 
      it('should handle microphone permission denied error', async () => {
           const onRecordingComplete = jest.fn();
@@ -179,14 +177,19 @@ describe('AudioRecorder Component', () => {
           );
 
           const button = screen.getByRole('button', { name: /start recording/i });
-          await userEvent.click(button);
+
+          await act(async () => {
+               await userEvent.click(button);
+          });
 
           await waitFor(() => {
                expect(screen.getByRole('button', { name: /stop recording/i })).toBeInTheDocument();
           });
 
           const stopButton = screen.getByRole('button', { name: /stop recording/i });
-          await userEvent.click(stopButton);
+          await act(async () => {
+               await userEvent.click(stopButton);
+          });
 
           await waitFor(() => {
                expect(onError).toHaveBeenCalledWith(
@@ -195,5 +198,38 @@ describe('AudioRecorder Component', () => {
           });
 
           expect(onRecordingComplete).not.toHaveBeenCalled();
+     });
+
+     it('should display "Explain Bug" label when not recording', () => {
+          render(
+               <AudioRecorder
+                    onRecordingComplete={jest.fn()}
+                    onError={jest.fn()}
+               />
+          );
+
+          expect(screen.getByText('Explain Bug')).toBeInTheDocument();
+     });
+
+     it('should call onRecordingStart when recording begins', async () => {
+          const onRecordingStart = jest.fn();
+
+          render(
+               <AudioRecorder
+                    onRecordingComplete={jest.fn()}
+                    onError={jest.fn()}
+                    onRecordingStart={onRecordingStart}
+               />
+          );
+
+          const button = screen.getByRole('button', { name: /start recording/i });
+
+          await act(async () => {
+               await userEvent.click(button);
+          });
+
+          await waitFor(() => {
+               expect(onRecordingStart).toHaveBeenCalled();
+          });
      });
 });
