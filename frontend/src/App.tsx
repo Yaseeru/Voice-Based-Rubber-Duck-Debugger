@@ -101,7 +101,7 @@ function App() {
      return (
           <div className="App">
                <header className="app-header">
-                    <Logo variant="wordmark" />
+                    <Logo variant="full" />
                     <p className="tagline">Debug by talking it through.</p>
                </header>
 

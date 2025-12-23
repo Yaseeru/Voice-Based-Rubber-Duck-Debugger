@@ -32,8 +32,10 @@ const PORT = config.port;
 const FRONTEND_URL = config.frontendUrl;
 
 // Configure CORS for frontend origin
+// In production, allow same-origin requests (frontend served from same server)
+const corsOrigin = process.env.NODE_ENV === 'production' ? true : FRONTEND_URL;
 app.use(cors({
-     origin: FRONTEND_URL,
+     origin: corsOrigin,
      credentials: true,
      methods: ['GET', 'POST', 'OPTIONS'],
      allowedHeaders: ['Content-Type', 'Authorization']
@@ -42,6 +44,13 @@ app.use(cors({
 // Body parser for JSON and large payloads (10MB limit for audio)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Serve static files from the frontend build (for production)
+if (process.env.NODE_ENV === 'production') {
+     const publicPath = path.resolve(__dirname, '../public');
+     app.use(express.static(publicPath));
+     console.log(`[${new Date().toISOString()}] Serving static files from: ${publicPath}`);
+}
 
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -71,14 +80,23 @@ app.get('/health', (_req: Request, res: Response) => {
 // Debug routes
 app.use('/debug', debugRouter);
 
-// 404 handler for unknown routes
-app.use((req: Request, res: Response, _next: NextFunction) => {
-     res.status(404).json({
-          error: 'NotFound',
-          message: `Route ${req.method} ${req.path} not found`,
-          statusCode: 404
+// Serve index.html for all other routes (SPA support in production)
+if (process.env.NODE_ENV === 'production') {
+     app.get('*', (_req: Request, res: Response) => {
+          res.sendFile(path.resolve(__dirname, '../public/index.html'));
      });
-});
+}
+
+// 404 handler for unknown routes (development only)
+if (process.env.NODE_ENV !== 'production') {
+     app.use((req: Request, res: Response, _next: NextFunction) => {
+          res.status(404).json({
+               error: 'NotFound',
+               message: `Route ${req.method} ${req.path} not found`,
+               statusCode: 404
+          });
+     });
+}
 
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

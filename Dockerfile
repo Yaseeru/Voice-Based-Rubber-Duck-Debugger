@@ -7,7 +7,7 @@ WORKDIR /app/frontend
 
 # Install dependencies first (better layer caching)
 COPY frontend/package*.json ./
-RUN npm ci --silent
+RUN npm install --silent
 
 # Copy source and build
 COPY frontend/ ./
@@ -19,7 +19,7 @@ WORKDIR /app/backend
 
 # Install dependencies first (better layer caching)
 COPY backend/package*.json ./
-RUN npm ci --silent
+RUN npm install --silent
 
 # Copy source and build
 COPY backend/ ./
@@ -39,7 +39,7 @@ COPY --from=backend-builder /app/backend/dist ./dist
 COPY --from=backend-builder /app/backend/package*.json ./
 
 # Install production dependencies only
-RUN npm ci --only=production --silent && \
+RUN npm install --only=production --silent && \
     npm cache clean --force
 
 # Copy frontend build to serve as static files

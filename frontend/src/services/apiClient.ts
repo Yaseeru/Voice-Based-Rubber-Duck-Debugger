@@ -43,6 +43,10 @@ export class ApiError extends Error {
 export const getApiBaseUrl = (): string => {
      // In Vite, environment variables are accessed via import.meta.env
      // Variables must be prefixed with VITE_ to be exposed to the client
+     // In production, use relative URL since frontend and backend are served from same origin
+     if (import.meta.env.PROD) {
+          return '';  // Empty string means relative URL (same origin)
+     }
      return import.meta.env.VITE_API_URL || 'http://localhost:8080';
 };
 
