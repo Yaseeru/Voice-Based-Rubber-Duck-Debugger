@@ -4,6 +4,7 @@ import StatusDisplay, { SystemStatus } from './components/StatusDisplay';
 import AudioPlayer from './components/AudioPlayer';
 import ConversationDisplay, { ConversationTurn } from './components/ConversationDisplay';
 import { apiClient, ApiError } from './services/apiClient';
+import Logo from './components/Logo';
 
 function App() {
      // State management
@@ -100,8 +101,8 @@ function App() {
      return (
           <div className="App">
                <header className="app-header">
-                    <h1>🦆 Voice-Based Rubber Duck Debugger</h1>
-                    <p className="tagline">Explain your bugs, find your solutions</p>
+                    <Logo variant="wordmark" />
+                    <p className="tagline">Debug by talking it through.</p>
                </header>
 
                <main className="app-main">
@@ -138,7 +139,7 @@ function App() {
                </main>
 
                <footer className="app-footer">
-                    <p>Powered by ElevenLabs & Google Vertex AI</p>
+                    <p>VoxDuck - Your voice-first debugging companion</p>
                </footer>
           </div>
      );

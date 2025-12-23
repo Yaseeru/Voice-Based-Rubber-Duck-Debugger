@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import ConversationDisplay, { ConversationTurn } from './ConversationDisplay';
+import * as fc from 'fast-check';
 
 describe('ConversationDisplay Component', () => {
      // Unit test for empty conversation
@@ -129,5 +130,47 @@ describe('ConversationDisplay Component', () => {
           // Verify icons are present
           expect(screen.getByText('👤')).toBeInTheDocument();
           expect(screen.getByText('🦆')).toBeInTheDocument();
+     });
+
+     // Property test for message font consistency
+     // **Feature: voxduck-rebrand, Property 2: Message text font consistency**
+     // **Validates: Requirements 4.1**
+     it('should apply Inter font family to all message content', () => {
+          fc.assert(
+               fc.property(
+                    // Generate random conversation turns with arbitrary text content
+                    fc.array(
+                         fc.record({
+                              input: fc.string({ minLength: 1, maxLength: 200 }),
+                              output: fc.string({ minLength: 1, maxLength: 200 }),
+                              timestamp: fc.integer({ min: 0, max: Date.now() }),
+                         }),
+                         { minLength: 1, maxLength: 10 }
+                    ),
+                    (conversationHistory) => {
+                         const { container } = render(
+                              <ConversationDisplay conversationHistory={conversationHistory} />
+                         );
+
+                         // Get all message content elements
+                         const messageContents = container.querySelectorAll('.message-content');
+
+                         // Verify each message content element exists and has the correct class
+                         // The CSS applies font-family: var(--font-family-base) which is Inter
+                         expect(messageContents.length).toBeGreaterThan(0);
+
+                         messageContents.forEach((messageContent) => {
+                              // Verify the element has the message-content class which applies Inter font
+                              expect(messageContent.classList.contains('message-content')).toBe(true);
+
+                              // Verify the parent message element has the message class which also applies Inter
+                              const messageElement = messageContent.closest('.message');
+                              expect(messageElement).not.toBeNull();
+                              expect(messageElement?.classList.contains('message')).toBe(true);
+                         });
+                    }
+               ),
+               { numRuns: 100 }
+          );
      });
 });

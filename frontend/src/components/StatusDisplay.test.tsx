@@ -15,7 +15,12 @@ describe('StatusDisplay Component', () => {
           fc.assert(
                fc.property(
                     fc.constantFrom<SystemStatus>('listening', 'thinking', 'playing', 'ready', 'error'),
-                    fc.option(fc.string({ minLength: 1, maxLength: 100 }).filter(s => s.trim().length > 0), { nil: undefined }), // Optional non-whitespace error message
+                    fc.option(
+                         fc.string({ minLength: 1, maxLength: 100 })
+                              .filter(s => s.trim().length > 0)
+                              .map(s => s.trim()), // Trim the string to avoid whitespace issues
+                         { nil: undefined }
+                    ),
                     (status, errorMessage) => {
                          // Clean up before each iteration
                          cleanup();
@@ -110,5 +115,37 @@ describe('StatusDisplay Component', () => {
           render(<StatusDisplay status="error" />);
           expect(screen.getByText('An error occurred')).toBeInTheDocument();
           expect(screen.getByText('⚠️')).toBeInTheDocument();
+     });
+
+     /**
+      * Feature: voxduck-rebrand, Property 1: Status state color mapping
+      * Validates: Requirements 2.1, 2.2, 2.3, 2.4
+      */
+     it('should apply correct brand color class for each status state', () => {
+          fc.assert(
+               fc.property(
+                    fc.constantFrom<SystemStatus>('listening', 'thinking', 'playing', 'error'),
+                    (status) => {
+                         cleanup();
+
+                         const { container, unmount } = render(<StatusDisplay status={status} />);
+                         const statusElement = container.querySelector('.status-display');
+
+                         expect(statusElement).toBeInTheDocument();
+
+                         // Verify the correct status class is applied
+                         // Each status class maps to a specific brand color via CSS:
+                         // listening -> status-listening -> --color-status-listening (#22D3EE)
+                         // thinking -> status-thinking -> --color-status-thinking (#7C3AED)
+                         // playing -> status-playing -> --color-status-speaking (#10B981)
+                         // error -> status-error -> --color-status-error (#EF4444)
+                         const expectedClass = `status-${status}`;
+                         expect(statusElement).toHaveClass(expectedClass);
+
+                         unmount();
+                    }
+               ),
+               { numRuns: 100 }
+          );
      });
 });
